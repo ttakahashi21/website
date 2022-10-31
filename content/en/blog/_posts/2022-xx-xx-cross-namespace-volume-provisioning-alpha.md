@@ -12,6 +12,11 @@ Kubernetes v1.26, released earlier this month, introduced an enable usage of pro
 Before Kubernetes v1.25, by using volume snapshots feature, users can provision volumes from snapshots. However, it only works for the `VolumeSnapshot` in the samme namespace, therefore users can't provision a persisten volume claim in one namespace from a `VolumeSnapshot` in other namespace. On the other hand, there are use cases that require to share the `VolumeSnapshot` across namespaces.  
  To solve this problem,Kubernetes v1.26 includes a new API field called `dataSourceRef2`.
 
+
+## How it works
+
+Once the csi-provisioner finds a VolumeSnapshot is specified with non-empty namespace as dataSourceRef2, it checks all ReferenceGrants in　PersistentVolumeClaim.spec.dataSourceRef2.namespace to see if access to the snapshot is allowed. If it is allowed, the csi-provisioner provisions a volume from the snapshot.  
+
 ## Trying it out
 
 The following things are required to use cross namespace volume provisioning:
