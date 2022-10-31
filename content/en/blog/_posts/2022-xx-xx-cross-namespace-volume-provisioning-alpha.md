@@ -1,0 +1,120 @@
+---
+layout: blog
+title: "Kubernetes 1.26: alpha support for Cross Namespace Volume provisioning"
+date: 2022-12-9
+slug: cross-namespace-volume-provisioning-redesigned
+---
+
+**Authors:**
+Takafumi Takahashi (Hitachi Vantara)
+
+Kubernetes v1.26, released earlier this month, introduced an enable usage of provision of persisten volume claim from volume snapshot in other namespaces.  
+Before Kubernetes v1.25, by using volume snapshots feature, users can provision volumes from snapshots. However, it only works for the `VolumeSnapshot` in the samme namespace, therefore users can't provision a persisten volume claim in one namespace from a `VolumeSnapshot` in other namespace. On the other hand, there are use cases that require to share the `VolumeSnapshot` across namespaces.  
+ To solve this problem,Kubernetes v1.26 includes a new API field called `dataSourceRef2`.
+
+## TBD Data sources Ref2
+
+
+## TBD How it works
+
+
+## Trying it out
+
+The following things are required to use cross namespace volume provisioning:
+
+* Enable the `CrossNamespaceVolumeDataSource` feature gate
+* Install a CRD for the specific `VolumeSnapShot controller`
+* Install the `VolumeSnapShot controller` itself
+* Install the `External Provisioner controller` itself
+* Install the `Container Stroge Interface Driver` itself
+
+## Putting it all together
+
+To see how this works, you can install the sample and try it out.
+This sample do to create PVC in ns1 namespace from VolumeSnapshot in default namespace by using csi-hostpath driver.
+
+1. Deploy VolumeSnapshot controller.
+
+   ```terminal
+   kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml
+   kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml
+   kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml
+
+
+   kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/deploy/kubernetes/snapshot-controller/rbac-snapshot-controller.yaml
+   kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/deploy/kubernetes/snapshot-controller/setup-snapshot-controller.yaml
+   ```
+
+2. Deploy External Provisioner controller.
+
+   ```terminal
+   kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-provisioner/master/deploy/kubernetes/deployment.yaml 
+   kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-provisioner/master/deploy/kubernetes/rbac.yaml
+   ```
+
+3. Deploy csi-hostpath driver.
+
+   ```terminal
+   cd /tmp
+   git clone --depth=1 https://github.com/kubernetes-csi/csi-driver-host-path.git
+   cd csi-driver-host-path
+   ./deploy/kubernetes-latest/deploy.sh
+   ```
+
+4. Deploy ReferenceGrants CRD
+  
+   ```terminal
+   kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/main/config/ crd/experimental/gateway.networking.k8s.io_referencegrants.yaml
+   ```
+
+5. Ceate a ns1 namespace
+
+    ```terminal
+    kubectl create ns ns1
+    ```
+
+6. Create a ReferenceGrant
+
+   ```yaml
+   apiVersion: gateway.networking.k8s.io/v1alpha2
+   kind: ReferenceGrant
+   metadata:
+     name: bar
+     namespace: default
+   spec:
+     from:
+     - group: ""
+       kind: PersistentVolumeClaim
+       namespace: ns1
+     to:
+     - group: snapshot.storage.k8s.io
+       kind: VolumeSnapshot
+       name: new-snapshot-demo
+   ```
+
+7. Create a PersistentVolumeClaim
+
+   ```yaml
+   apiVersion: v1
+   kind: PersistentVolumeClaim
+   metadata:
+     name: foo-pvc
+     namespace: ns1
+   spec:
+     storageClassName: csi-hostpath-sc
+     accessModes:
+     - ReadWriteOnce
+     resources:
+       requests:
+         storage: 1Gi
+     dataSourceRef2:
+       apiGroup: snapshot.storage.k8s.io
+       kind: VolumeSnapshot
+       name: new-snapshot-demo
+       namespace: default
+     volumeMode: Filesystem
+   ```
+
+Note This is only the simplest example.
+
+
