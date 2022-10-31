@@ -1,8 +1,8 @@
 ---
 layout: blog
-title: "Kubernetes 1.26: alpha support for Cross Namespace Volume provisioning"
+title: "Kubernetes 1.26: alpha support for provision volumes from cross-namespace snapshots"
 date: 2022-12-9
-slug: cross-namespace-volume-provisioning-redesigned
+slug: provision-volumes-from-cross-namespace-snapshots-redesigned
 ---
 
 **Authors:**
@@ -117,4 +117,12 @@ This sample do to create PVC in ns1 namespace from VolumeSnapshot in default nam
 
 Note This is only the simplest example.
 
+
+## How can I learn more?
+
+The enhancement proposal,
+[Provision volumes from cross-namespace snapshots](https://github.com/kubernetes/enhancements/tree/master/keps/sig-storage/3294-provision-volumes-from-cross-namespace-snapshots), includes lots of detail about the history and technical implementation of this feature.
+
+Please get involved by joining the Kubernetes storage SIG to help us enhance this
+feature. There are a lot of good ideas already and we'd be thrilled to have more!
 
