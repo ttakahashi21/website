@@ -953,6 +953,18 @@ or to a VolumeSnapshot, the `dataSourceRef` field can contain a reference to any
 same namespace, except for core objects other than PVCs. For clusters that have the feature
 gate enabled, use of the `dataSourceRef` is preferred over `dataSource`.
 
+## Cross namespace data sources
+{{< feature-state for_k8s_version="v1.26" state="alpha" >}}
+
+Kubernetes supports cross namespace volume data source.
+To use cross namespace volume datasource, you must enable the `AnyVolumeDataSource` and `CrossNamespaceVolumeDataSource`
+[feature gate](/docs/reference/command-line-tools-reference/feature-gates/) for
+the kube-apiserver, kube-controller-manager.
+Also, you must enable the `CrossNamespaceVolumeDataSource` feature gate for csi-provisioner.
+
+Enabling the `CrossNamespaceVolumeDataSource` feature gate allow you to specify a namespace in the dataSourceRef field.
+{{< note >}}  When a namespace is specified, a gateway.networking.k8s.io/ReferenceGrant object is required in the referent namespace to allow that namespace's owner to accept the reference. See the [ReferenceGrant documentation](https://gateway-api.sigs.k8s.io/api-types/referencegrant/) for details.
+
 ## Data source references
 
 The `dataSourceRef` field behaves almost the same as the `dataSource` field. If either one is
@@ -969,6 +981,11 @@ users should be aware of:
   used. Invalid values are any core object (objects with no apiGroup) except for PVCs.
 * The `dataSourceRef` field may contain different types of objects, while the `dataSource` field
   only allows PVCs and VolumeSnapshots.
+
+When the `CrossNamespaceVolumeDataSource` feature is enabled, there are additional differences:
+
+* The `dataSource` field only allows local objects, while the `dataSourceRef` field allows objects in any namespaces.  
+* When namespace is specified, dataSource and dataSourceRef are not synced.
 
 Users should always use `dataSourceRef` on clusters that have the feature gate enabled, and
 fall back to `dataSource` on clusters that do not. It is not necessary to look at both fields
@@ -1009,6 +1026,50 @@ controller into your cluster. That controller generates warning Events on a PVC 
 is registered to handle that kind of data source. When a suitable populator is installed for a PVC, it's the
 responsibility of that populator controller to report Events that relate to volume creation and issues during
 the process.
+
+### Using Cross Namespace Volume Data Source
+{{< feature-state for_k8s_version="v1.26" state="alpha" >}}
+
+Create a gateway.networking.k8s.io/ReferenceGrant to allow the namespace owner to accept the reference.
+Users create a populated volume by referring cross namespace volume data source using the `dataSourceRef` field:
+
+   ```yaml
+   apiVersion: gateway.networking.k8s.io/v1beta1
+   kind: ReferenceGrant
+   metadata:
+     name: allow-ns1-pvcg
+     namespace: default
+   spec:
+     from:
+     - group: ""
+       kind: PersistentVolumeClaim
+       namespace: ns1
+     to:
+     - group: snapshot.storage.k8s.io
+       kind: VolumeSnapshot
+       name: new-snapshot-demo
+   ```
+
+   ```yaml
+   apiVersion: v1
+   kind: PersistentVolumeClaim
+   metadata:
+     name: foo-pvc
+     namespace: ns1
+   spec:
+     storageClassName: example
+     accessModes:
+     - ReadWriteOnce
+     resources:
+       requests:
+         storage: 1Gi
+     dataSourceRef:
+       apiGroup: snapshot.storage.k8s.io
+       kind: VolumeSnapshot
+       name: new-snapshot-demo
+       namespace: default
+     volumeMode: Filesystem
+   ```
 
 ## Writing Portable Configuration
 
