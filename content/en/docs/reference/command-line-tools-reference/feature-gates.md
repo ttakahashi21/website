@@ -403,7 +403,8 @@ Each feature gate is designed for enabling/disabling a specific feature:
   This feature gate guards *a group* of CPUManager options whose quality level is beta.
   This feature gate will never graduate to stable.
 - `CPUManagerPolicyOptions`: Allow fine-tuning of CPUManager policies.
-- `CrossNamespaceVolumeDataSource`: Enable usage of Provision of PVCs from VolumeSnasphot in other namespaces.
+- `CrossNamespaceVolumeDataSource`: Enable provisioning a {{< glossary_tooltip text="PersistentVolumeClaim" term_id="persistent-volume-claim" >}}
+  (PVC) that is based on VolumeSnapshot in a different namespace from the PVC.
 - `CSIInlineVolume`: Enable CSI Inline volumes support for pods.
 - `CSIMigration`: Enables shims and translation logic to route volume
   operations from in-tree plugins to corresponding pre-installed CSI plugins

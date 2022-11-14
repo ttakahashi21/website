@@ -1010,6 +1010,62 @@ is registered to handle that kind of data source. When a suitable populator is i
 responsibility of that populator controller to report Events that relate to volume creation and issues during
 the process.
 
+## Provision of PersistentVolumeClaims from VolumeSnasphot in other namespaces
+
+{{< feature-state for_k8s_version="v1.26" state="alpha" >}}
+
+To use this feature, you must enable the AnyVolumeDataSource and CrossNamespaceVolumeDataSource feature gate for the kube-apiserver and kube-controller-manager.
+Enabling the CrossNamespaceVolumeDataSource feature gate allow you to specify a namespace in the dataSourceRef field.
+
+There are three important differences between dataSource and dataSourceRef.
+* While dataSource only allows two specific types of objects, dataSourceRef allows any non-core object, as well as PersistentVolumeClaim objects.
+* While dataSource ignores disallowed values (dropping them), dataSourceRef preserves all values, and generates an error if a disallowed value is specified.
+* While dataSource only allows local objects, dataSourceRef allows objects in any namespaces.
+
+Note that when a namespace is specified, a gateway.networking.k8s.io/ReferenceGrant object is required in the referent namespace to allow that namespace's owner to accept the reference. See the ReferenceGrant documentation for details.
+
+### Create a ReferenceGrant
+
+   ```yaml
+   apiVersion: gateway.networking.k8s.io/v1beta1
+   kind: ReferenceGrant
+   metadata:
+     name: bar
+     namespace: default
+   spec:
+     from:
+     - group: ""
+       kind: PersistentVolumeClaim
+       namespace: ns1
+     to:
+     - group: snapshot.storage.k8s.io
+       kind: VolumeSnapshot
+       name: new-snapshot-demo
+   ```
+
+### Create a PersistentVolumeClaim from a Volume Snapshot in other namespace
+
+   ```yaml
+   apiVersion: v1
+   kind: PersistentVolumeClaim
+   metadata:
+     name: foo-pvc
+     namespace: ns1
+   spec:
+     storageClassName: example
+     accessModes:
+     - ReadWriteOnce
+     resources:
+       requests:
+         storage: 1Gi
+     dataSourceRef2:
+       apiGroup: snapshot.storage.k8s.io
+       kind: VolumeSnapshot
+       name: new-snapshot-demo
+       namespace: default
+     volumeMode: Filesystem
+   ```
+
 ## Writing Portable Configuration
 
 If you're writing configuration templates or examples that run on a wide range of clusters
