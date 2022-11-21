@@ -953,6 +953,18 @@ or to a VolumeSnapshot, the `dataSourceRef` field can contain a reference to any
 same namespace, except for core objects other than PVCs. For clusters that have the feature
 gate enabled, use of the `dataSourceRef` is preferred over `dataSource`.
 
+## Cross Namespace Volume Data Source and data sources
+{{< feature-state for_k8s_version="v1.26" state="alpha" >}}
+
+Kubernetes supports cross namespace volume data source.
+To use cross namespace volume datasource, you must enable the `AnyVolumeDataSource` and `CrossNamespaceVolumeDataSource`
+[feature gate](/docs/reference/command-line-tools-reference/feature-gates/) for
+the kube-apiserver, kube-controller-manager.
+Also, you must enable the `CrossNamespaceVolumeDataSource` feature gate for csi-provisioner.
+
+Enabling the `CrossNamespaceVolumeDataSource` feature gate allow you to specify a namespace in the dataSourceRef field.
+{{< note >}}  When a namespace is specified, a gateway.networking.k8s.io/ReferenceGrant object is required in the referent namespace to allow that namespace's owner to accept the reference. See the [ReferenceGrant documentation](https://gateway-api.sigs.k8s.io/api-types/referencegrant/) for details.
+
 ## Data source references
 
 The `dataSourceRef` field behaves almost the same as the `dataSource` field. If either one is
@@ -969,6 +981,12 @@ users should be aware of:
   used. Invalid values are any core object (objects with no apiGroup) except for PVCs.
 * The `dataSourceRef` field may contain different types of objects, while the `dataSource` field
   only allows PVCs and VolumeSnapshots.
+
+In case of enabling the `CrossNamespaceVolumeDataSource` feature gate, there are three important differences between the `dataSource` field and the `dataSourceRef` field that users should be aware of: .
+
+* While the `dataSource` field only allows two specific types of objects, the `dataSourceRef` field allows any non-core object, as well as PersistentVolumeClaim objects.
+* While the `dataSource` field ignores disallowed values (dropping them), the `dataSourceRef` field preserves all values, and generates an error if a disallowed value is specified.
+* While the `dataSource`field only allows local objects, the `dataSourceRef` field allows objects in any namespaces.
 
 Users should always use `dataSourceRef` on clusters that have the feature gate enabled, and
 fall back to `dataSource` on clusters that do not. It is not necessary to look at both fields
@@ -1010,40 +1028,9 @@ is registered to handle that kind of data source. When a suitable populator is i
 responsibility of that populator controller to report Events that relate to volume creation and issues during
 the process.
 
-## Provision of PersistentVolumeClaims from VolumeSnasphot in other namespaces
+### Using Cross Namespace Volume Data Source
 
-{{< feature-state for_k8s_version="v1.26" state="alpha" >}}
-
-To use this feature, you must enable the AnyVolumeDataSource and CrossNamespaceVolumeDataSource feature gate for the kube-apiserver and kube-controller-manager.
-Enabling the CrossNamespaceVolumeDataSource feature gate allow you to specify a namespace in the dataSourceRef field.
-
-There are three important differences between dataSource and dataSourceRef.
-* While dataSource only allows two specific types of objects, dataSourceRef allows any non-core object, as well as PersistentVolumeClaim objects.
-* While dataSource ignores disallowed values (dropping them), dataSourceRef preserves all values, and generates an error if a disallowed value is specified.
-* While dataSource only allows local objects, dataSourceRef allows objects in any namespaces.
-
-Note that when a namespace is specified, a gateway.networking.k8s.io/ReferenceGrant object is required in the referent namespace to allow that namespace's owner to accept the reference. See the ReferenceGrant documentation for details.
-
-### Create a ReferenceGrant
-
-   ```yaml
-   apiVersion: gateway.networking.k8s.io/v1beta1
-   kind: ReferenceGrant
-   metadata:
-     name: bar
-     namespace: default
-   spec:
-     from:
-     - group: ""
-       kind: PersistentVolumeClaim
-       namespace: ns1
-     to:
-     - group: snapshot.storage.k8s.io
-       kind: VolumeSnapshot
-       name: new-snapshot-demo
-   ```
-
-### Create a PersistentVolumeClaim from a Volume Snapshot in other namespace
+Users create a populated volume by referring cross namespace volume data source using the `dataSourceRef` field:
 
    ```yaml
    apiVersion: v1
