@@ -1,37 +1,48 @@
 ---
 layout: blog
-title: "Kubernetes 1.26: alpha support for provision volumes from cross-namespace snapshots"
+title: "Kubernetes v1.26: alpha support for cross namespace data sources"
 date: 2022-12-6
-slug: provision-volumes-from-cross-namespace-snapshots-redesigned
+slug: cross-namespace-data-sources-alpha-redesigned
 ---
 
 **Authors:**
 Takafumi Takahashi (Hitachi Vantara)
 
-Kubernetes v1.26, released earlier this month, introduced an enable usage of provision of persisten volume claim from volume snapshot in other namespaces.  
-Before Kubernetes v1.25, by using volume snapshots feature, users can provision volumes from snapshots. However, it only works for the `VolumeSnapshot` in the samme namespace, therefore users can't provision a persisten volume claim in one namespace from a `VolumeSnapshot` in other namespace. On the other hand, there are use cases that require to share the `VolumeSnapshot` across namespaces.  
- To solve this problem,Kubernetes v1.26 includes a new API field called `dataSourceRef2`.
+Kubernetes v1.26, released earlier this month, introduced an enable the usage of
+cross namespace volume data source to allow you to specify a namespace
+in the `dataSourceRef` field.
+Before Kubernetes v1.26, by using `AnyVolumeDataSource` feature,
+users can provision volumes from data source in the same namespace.
+However, it only works for the data source in the same namespace,
+therefore users can't provision a persisten volume claim
+in one namespace from a data source in other namespace.
+To solve this problem, Kubernetes v1.26 adds a new namespace alpha field
+to `dataSourceRef` field in PersistentVolumeClaim API.
 
 ## How it works
 
-Once the csi-provisioner finds a VolumeSnapshot is specified with non-empty namespace as dataSourceRef2, it checks all ReferenceGrants in　PersistentVolumeClaim.spec.dataSourceRef2.namespace to see if access to the snapshot is allowed. If it is allowed, the csi-provisioner provisions a volume from the snapshot.  
+Once the csi-provisioner finds that a data source is specified with a `dataSourceRef` that
+has a non-empty namespace name,
+it checks all reference grants within the namespace that's specified by the`.spec.dataSourceRef.namespace`
+field of the PersistentVolumeClaim, in order to see if access to the data source is allowed.
+If any ReferenceGrant allows access, the csi-provisioner provisions a volume from the data source.
 
 ## Trying it out
 
 The following things are required to use cross namespace volume provisioning:
 
-* Enable the `CrossNamespaceVolumeDataSource` feature gate
-* Install a CRD for the specific `VolumeSnapShot controller`
-* Install the `VolumeSnapShot controller` itself
-* Install the `External Provisioner controller` itself
-* Install the `Container Stroge Interface Driver` itself
+* Enable the `AnyVolumeDataSource` and `CrossNamespaceVolumeDataSource` [feature gate](/docs/reference/command-line-tools-reference/feature-gates/) for the kube-apiserver, kube-controller-manager
+* Install a CRD for the specific `VolumeSnapShot` controller
+* Install the CSI Provisioner controller and enable the `CrossNamespaceVolumeDataSource` feature gate
+* Install the CSI driver
+* Install a CRD for ReferenceGrants
 
 ## Putting it all together
 
 To see how this works, you can install the sample and try it out.
 This sample do to create PVC in ns1 namespace from VolumeSnapshot in default namespace by using csi-hostpath driver.
 
-1. Deploy VolumeSnapshot controller.
+1. Deploy VolumeSnapshot CRD and controller.
 
    ```terminal
    kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml
@@ -43,7 +54,7 @@ This sample do to create PVC in ns1 namespace from VolumeSnapshot in default nam
    kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/deploy/kubernetes/snapshot-controller/setup-snapshot-controller.yaml
    ```
 
-2. Deploy External Provisioner controller.
+2. Deploy CSI Provisioner controller.
 
    ```terminal
    kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-provisioner/master/deploy/kubernetes/deployment.yaml 
@@ -66,27 +77,27 @@ This sample do to create PVC in ns1 namespace from VolumeSnapshot in default nam
    ```
 
 5. Create StorageClass, PVC, and VolumeSnapshot by the examples in the csi-hostpath repo
+In csi-host-path directory(/tmp/csi-driver-host-path):
 
     ```terminal
-    cd /tmp/csi-driver-host-path
     kubectl apply -f examples/csi-storageclass.yaml
     kubectl apply -f examples/csi-pvc.yaml
-    kubectl apply -f examples/csi-snapshot-v1beta1.yaml
+    kubectl apply -f examples/csi-snapshot-v1.yaml
     ```
 
-6. Ceate a ns1 namespace
+6. Ceate a new namespace named `ns1`
 
     ```terminal
     kubectl create ns ns1
     ```
 
-7. Create a ReferenceGrant
+7. Create a ReferenceGrant. Here's a manifest for an example ReferenceGrant.
 
    ```yaml
-   apiVersion: gateway.networking.k8s.io/v1alpha2
+   apiVersion: gateway.networking.k8s.io/v1beta1
    kind: ReferenceGrant
    metadata:
-     name: bar
+     name: allow-ns1-pvc
      namespace: default
    spec:
      from:
@@ -108,13 +119,13 @@ This sample do to create PVC in ns1 namespace from VolumeSnapshot in default nam
      name: foo-pvc
      namespace: ns1
    spec:
-     storageClassName: csi-hostpath-sc
+     storageClassName: example
      accessModes:
      - ReadWriteOnce
      resources:
        requests:
          storage: 1Gi
-     dataSourceRef2:
+     dataSourceRef:
        apiGroup: snapshot.storage.k8s.io
        kind: VolumeSnapshot
        name: new-snapshot-demo
@@ -122,12 +133,12 @@ This sample do to create PVC in ns1 namespace from VolumeSnapshot in default nam
      volumeMode: Filesystem
    ```
 
-Note This is only the simplest example.
+That is a simple example. For real world use, you might want to use a more complex approach.
 
 ## How can I learn more?
 
 The enhancement proposal,
 [Provision volumes from cross-namespace snapshots](https://github.com/kubernetes/enhancements/tree/master/keps/sig-storage/3294-provision-volumes-from-cross-namespace-snapshots), includes lots of detail about the history and technical implementation of this feature.
 
-Please get involved by joining the Kubernetes storage SIG to help us enhance this
+Please get involved by joining the Kubernetes SIG Storage to help us enhance this
 feature. There are a lot of good ideas already and we'd be thrilled to have more!
