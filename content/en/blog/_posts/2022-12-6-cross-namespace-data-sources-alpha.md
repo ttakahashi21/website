@@ -10,7 +10,7 @@ Takafumi Takahashi (Hitachi Vantara)
 
 Kubernetes v1.26, released earlier this month, introduced an enable the usage of
 cross namespace volume data source to allow you to specify a namespace
-in the `dataSourceRef` field.
+in the `dataSourceRef` field of a PersistentVolumeClaim.
 Before Kubernetes v1.26, by using `AnyVolumeDataSource` feature,
 users can provision volumes from data source in the same namespace.
 However, it only works for the data source in the same namespace,
@@ -33,65 +33,54 @@ The following things are required to use cross namespace volume provisioning:
 
 * Enable the `AnyVolumeDataSource` and `CrossNamespaceVolumeDataSource` [feature gate](/docs/reference/command-line-tools-reference/feature-gates/) for the kube-apiserver, kube-controller-manager
 * Install a CRD for the specific `VolumeSnapShot` controller
-* Install the CSI Provisioner controller and enable the `CrossNamespaceVolumeDataSource` feature gate
+* Install the CSI Provisioner controller
 * Install the CSI driver
 * Install a CRD for ReferenceGrants
 
 ## Putting it all together
 
 To see how this works, you can install the sample and try it out.
-This sample do to create PVC in ns1 namespace from VolumeSnapshot in default namespace by using csi-hostpath driver.
+This sample do to create PVC in ns1 namespace from VolumeSnapshot in default namespace.
+The procedure assumes that all the items described in
+"Trying it out" have been completed.
 
-1. Deploy VolumeSnapshot CRD and controller.
+1. Deploy CSI Provisioner RBAC
 
-   ```terminal
-   kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml
-   kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml
-   kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml
+   Access to referencegrants is only needed when the CSI driver
+   has the CrossNamespaceVolumeDataSource controller capability.
+   Therefore, external-provisioner adds "get", "list", "watch"
+   permissions for "referencegrants" on "gateway.networking.k8s.io".
 
-
-   kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/deploy/kubernetes/snapshot-controller/rbac-snapshot-controller.yaml
-   kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/deploy/kubernetes/snapshot-controller/setup-snapshot-controller.yaml
+   ```yaml
+    - apiGroups: ["gateway.networking.k8s.io"]
+      resources: ["referencegrants"]
+      verbs: ["get", "list", "watch"]
    ```
 
-2. Deploy CSI Provisioner controller.
+2. The CSI Provisioner controller and enable the
+   `CrossNamespaceVolumeDataSource` feature gate
 
-   ```terminal
-   kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-provisioner/master/deploy/kubernetes/deployment.yaml 
-   kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-provisioner/master/deploy/kubernetes/rbac.yaml
+   Add `--feature-gates=CrossNamespaceVolumeDataSource=true` to
+   csi-provisioner container
+
+   ```yaml
+      - args:
+        - -v=5
+        - --csi-address=/csi/csi.sock
+        - --feature-gates=Topology=true
+        - --feature-gates=CrossNamespaceVolumeDataSource=true
+        image: csi-provisioner:latest
+        imagePullPolicy: IfNotPresent
+        name: csi-provisioner
    ```
 
-3. Deploy csi-hostpath driver.
-
-   ```terminal
-   cd /tmp
-   git clone --depth=1 https://github.com/kubernetes-csi/csi-driver-host-path.git
-   cd csi-driver-host-path
-   ./deploy/kubernetes-latest/deploy.sh
-   ```
-
-4. Deploy ReferenceGrants CRD
-  
-   ```terminal
-   kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/main/config/ crd/experimental/gateway.networking.k8s.io_referencegrants.yaml
-   ```
-
-5. Create StorageClass, PVC, and VolumeSnapshot by the examples in the csi-hostpath repo
-In csi-host-path directory(/tmp/csi-driver-host-path):
-
-    ```terminal
-    kubectl apply -f examples/csi-storageclass.yaml
-    kubectl apply -f examples/csi-pvc.yaml
-    kubectl apply -f examples/csi-snapshot-v1.yaml
-    ```
-
-6. Ceate a new namespace named `ns1`
+3. Ceate a new namespace named `ns1`
 
     ```terminal
     kubectl create ns ns1
     ```
 
-7. Create a ReferenceGrant. Here's a manifest for an example ReferenceGrant.
+4. Create a ReferenceGrant. Here's a manifest for an example ReferenceGrant.
 
    ```yaml
    apiVersion: gateway.networking.k8s.io/v1beta1
@@ -110,13 +99,13 @@ In csi-host-path directory(/tmp/csi-driver-host-path):
        name: new-snapshot-demo
    ```
 
-8. Create a PersistentVolumeClaim
+5. Create a PersistentVolumeClaim
 
    ```yaml
    apiVersion: v1
    kind: PersistentVolumeClaim
    metadata:
-     name: foo-pvc
+     name: example-pvc
      namespace: ns1
    spec:
      storageClassName: example
