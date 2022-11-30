@@ -33,37 +33,42 @@ The following things are required to use cross namespace volume provisioning:
 
 * Enable the `AnyVolumeDataSource` and `CrossNamespaceVolumeDataSource` [feature gate](/docs/reference/command-line-tools-reference/feature-gates/) for the kube-apiserver, kube-controller-manager
 * Install a CRD for the specific `VolumeSnapShot` controller
-* Install the CSI Provisioner controller
+* Install the CSI Provisioner controller and enable the `CrossNamespaceVolumeDataSource` feature gate
 * Install the CSI driver
 * Install a CRD for ReferenceGrants
 
 ## Putting it all together
 
 To see how this works, you can install the sample and try it out.
-This sample do to create PVC in ns1 namespace from VolumeSnapshot in default namespace.
-The procedure assumes that all the items described in
-"Trying it out" have been completed.
+This sample do to create PVC in dev namespace from VolumeSnapshot in prod namespace.
+That is a simple example. For real world use, you might want to use a more complex approach.
 
-1. Deploy CSI Provisioner RBAC
+### Prerequisites
 
-   Access to referencegrants is only needed when the CSI driver
-   has the CrossNamespaceVolumeDataSource controller capability.
-   Therefore, external-provisioner adds "get", "list", "watch"
-   permissions for "referencegrants" on "gateway.networking.k8s.io".
+* Kubernetes cluster is being deployed with `AnyVolumeDataSource` and `CrossNamespaceVolumeDataSource` features enabled
+* There are two namespaces, dev and prod
+* CSI driver is being deployed
+* There is an acquired VolumeSnapShot named of "new-snapshot-demo" on prod
+* ReferenceGrants CRD is being deployed
 
-   ```yaml
-    - apiGroups: ["gateway.networking.k8s.io"]
-      resources: ["referencegrants"]
-      verbs: ["get", "list", "watch"]
-   ```
+### Add referencegrants permission to CSI Provisioner RBAC
 
-2. The CSI Provisioner controller and enable the
-   `CrossNamespaceVolumeDataSource` feature gate
+Access to referencegrants is only needed when the CSI driver
+has the `CrossNamespaceVolumeDataSource` controller capability.
+Therefore, external-provisioner adds "get", "list", "watch"
+permissions for "referencegrants" on "gateway.networking.k8s.io".
 
-   Add `--feature-gates=CrossNamespaceVolumeDataSource=true` to
-   csi-provisioner container
+```yaml
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["referencegrants"]
+    verbs: ["get", "list", "watch"]
+```
 
-   ```yaml
+### The CSI Provisioner controller and enable the CrossNamespaceVolumeDataSource feature gate
+
+Add `--feature-gates=CrossNamespaceVolumeDataSource=true` to csi-provisioner container
+
+```yaml
       - args:
         - -v=5
         - --csi-address=/csi/csi.sock
@@ -72,57 +77,49 @@ The procedure assumes that all the items described in
         image: csi-provisioner:latest
         imagePullPolicy: IfNotPresent
         name: csi-provisioner
-   ```
+```
 
-3. Ceate a new namespace named `ns1`
+### Create a ReferenceGrant. Here's a manifest for an example ReferenceGrant.
 
-    ```terminal
-    kubectl create ns ns1
-    ```
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: ReferenceGrant
+metadata:
+  name: allow-prod-pvc
+  namespace: prod
+spec:
+  from:
+  - group: ""
+    kind: PersistentVolumeClaim
+    namespace: dev
+  to:
+  - group: snapshot.storage.k8s.io
+    kind: VolumeSnapshot
+    name: new-snapshot-demo
+```
 
-4. Create a ReferenceGrant. Here's a manifest for an example ReferenceGrant.
+### Create a PersistentVolumeClaim by using cross namespace data source
 
-   ```yaml
-   apiVersion: gateway.networking.k8s.io/v1beta1
-   kind: ReferenceGrant
-   metadata:
-     name: allow-ns1-pvc
-     namespace: default
-   spec:
-     from:
-     - group: ""
-       kind: PersistentVolumeClaim
-       namespace: ns1
-     to:
-     - group: snapshot.storage.k8s.io
-       kind: VolumeSnapshot
-       name: new-snapshot-demo
-   ```
-
-5. Create a PersistentVolumeClaim
-
-   ```yaml
-   apiVersion: v1
-   kind: PersistentVolumeClaim
-   metadata:
-     name: example-pvc
-     namespace: ns1
-   spec:
-     storageClassName: example
-     accessModes:
-     - ReadWriteOnce
-     resources:
-       requests:
-         storage: 1Gi
-     dataSourceRef:
-       apiGroup: snapshot.storage.k8s.io
-       kind: VolumeSnapshot
-       name: new-snapshot-demo
-       namespace: default
-     volumeMode: Filesystem
-   ```
-
-That is a simple example. For real world use, you might want to use a more complex approach.
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: example-pvc
+  namespace: dev
+spec:
+  storageClassName: csi-hostpath-sc
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  dataSourceRef:
+    apiGroup: snapshot.storage.k8s.io
+    kind: VolumeSnapshot
+    name: new-snapshot-demo
+    namespace: prod
+  volumeMode: Filesystem
+```
 
 ## How can I learn more?
 
@@ -131,3 +128,10 @@ The enhancement proposal,
 
 Please get involved by joining the Kubernetes SIG Storage to help us enhance this
 feature. There are a lot of good ideas already and we'd be thrilled to have more!
+
+## Acknowledgment
+
+It takes a wonderful group to make wonderful software.
+Thanks are due to everyone who has contributed to the CrossNamespaceVolumeDataSouce feature,
+especially (in alphabetical order) Tim Hockin, Masaki Kimura, Michelle Au and Xing Yang.
+It’s been a joy to work with y’all on this.
