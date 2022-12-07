@@ -1,23 +1,27 @@
 ---
 layout: blog
-title: "Kubernetes v1.26: alpha support for cross namespace data sources"
+title: "Kubernetes v1.26: Alpha support for cross-namespace storage data sources"
 date: 2022-12-6
 slug: cross-namespace-data-sources-alpha-redesigned
 ---
 
 **Authors:**
 Takafumi Takahashi (Hitachi Vantara)
-
-Kubernetes v1.26, released earlier this month, introduced an enable the usage of
-cross namespace volume data source to allow you to specify a namespace
-in the `dataSourceRef` field of a PersistentVolumeClaim.
+Kubernetes v1.26, released earlier this month, introduced an alpha feature that
+lets you specify a data source for a PersistentVolumeClaim, even where the source
+data belong to a different namespace.
+With the new feature enabled, you specify a namespace in the `dataSourceRef` field of
+a new PersistentVolumeClaim. Once Kubernetes checks that access is OK, the new
+PersistentVolume can populate its data from the storage source specified in that other
+namespace.
 Before Kubernetes v1.26, by using `AnyVolumeDataSource` feature,
-users can provision volumes from data source in the same namespace.
+you could already provision new volumes from a data source in the **same**
+namespace.
 However, it only works for the data source in the same namespace,
-therefore users can't provision a persisten volume claim
+therefore users couldn't provision a PersistentVolume with a claim
 in one namespace from a data source in other namespace.
-To solve this problem, Kubernetes v1.26 adds a new namespace alpha field
-to `dataSourceRef` field in PersistentVolumeClaim API.
+To solve this problem, Kubernetes v1.26 added a new alpha `namespace` field
+to `dataSourceRef` field in PersistentVolumeClaim the API.
 
 ## How it works
 
@@ -31,7 +35,7 @@ If any ReferenceGrant allows access, the csi-provisioner provisions a volume fro
 
 The following things are required to use cross namespace volume provisioning:
 
-* Enable the `AnyVolumeDataSource` and `CrossNamespaceVolumeDataSource` [feature gate](/docs/reference/command-line-tools-reference/feature-gates/) for the kube-apiserver, kube-controller-manager
+* Enable the `AnyVolumeDataSource` and `CrossNamespaceVolumeDataSource` [feature gate](/docs/reference/command-line-tools-reference/feature-gates/) for the kube-apiserver and kube-controller-manager
 * Install a CRD for the specific `VolumeSnapShot` controller
 * Install the CSI Provisioner controller and enable the `CrossNamespaceVolumeDataSource` feature gate
 * Install the CSI driver
@@ -43,20 +47,20 @@ To see how this works, you can install the sample and try it out.
 This sample do to create PVC in dev namespace from VolumeSnapshot in prod namespace.
 That is a simple example. For real world use, you might want to use a more complex approach.
 
-### Prerequisites
+### Assumptions for this example {#example-assumptions}
 
-* Kubernetes cluster is being deployed with `AnyVolumeDataSource` and `CrossNamespaceVolumeDataSource` features enabled
+* Your Kubernetes cluster was deployed with `AnyVolumeDataSource` and `CrossNamespaceVolumeDataSource` feature gates enabled
 * There are two namespaces, dev and prod
 * CSI driver is being deployed
-* There is an acquired VolumeSnapShot named of "new-snapshot-demo" on prod
-* ReferenceGrants CRD is being deployed
+* There is an existing VolumeSnapshot named `new-snapshot-demo` in the _prod_ namespace
+* The ReferenceGrant CRD (from the Gateway API project) is already deployed
 
-### Add referencegrants permission to CSI Provisioner RBAC
+### Grant ReferenceGrants read permission to the CSI Provisioner
 
-Access to referencegrants is only needed when the CSI driver
+Access to ReferenceGrants is only needed when the CSI driver
 has the `CrossNamespaceVolumeDataSource` controller capability.
-Therefore, external-provisioner adds "get", "list", "watch"
-permissions for "referencegrants" on "gateway.networking.k8s.io".
+For this example, the external-provisioner needs **get**, **list**, and **watch**
+permissions for `referencegrants` (API group `gateway.networking.k8s.io`).
 
 ```yaml
   - apiGroups: ["gateway.networking.k8s.io"]
@@ -64,9 +68,10 @@ permissions for "referencegrants" on "gateway.networking.k8s.io".
     verbs: ["get", "list", "watch"]
 ```
 
-### The CSI Provisioner controller and enable the CrossNamespaceVolumeDataSource feature gate
+### Enable the CrossNamespaceVolumeDataSource feature gate for the CSI Provisioner
 
-Add `--feature-gates=CrossNamespaceVolumeDataSource=true` to csi-provisioner container
+Add `--feature-gates=CrossNamespaceVolumeDataSource=true` to the csi-provisioner command line.
+For example, use this manifest snippet to redefine the container:
 
 ```yaml
       - args:
@@ -79,10 +84,12 @@ Add `--feature-gates=CrossNamespaceVolumeDataSource=true` to csi-provisioner con
         name: csi-provisioner
 ```
 
-### Create a ReferenceGrant. Here's a manifest for an example ReferenceGrant.
+### Create a ReferenceGrant
+
+Here's a manifest for an example ReferenceGrant.
 
 ```yaml
-apiVersion: gateway.networking.k8s.io/v1alpha2
+apiVersion: gateway.networking.k8s.io/v1beta1
 kind: ReferenceGrant
 metadata:
   name: allow-prod-pvc
@@ -99,6 +106,9 @@ spec:
 ```
 
 ### Create a PersistentVolumeClaim by using cross namespace data source
+
+Kubernetes creates a PersistentVolumeClaim on dev and the CSI driver populates
+the PersistentVolume used on dev from snapshots on prod.
 
 ```yaml
 apiVersion: v1
@@ -126,12 +136,24 @@ spec:
 The enhancement proposal,
 [Provision volumes from cross-namespace snapshots](https://github.com/kubernetes/enhancements/tree/master/keps/sig-storage/3294-provision-volumes-from-cross-namespace-snapshots), includes lots of detail about the history and technical implementation of this feature.
 
-Please get involved by joining the Kubernetes SIG Storage to help us enhance this
-feature. There are a lot of good ideas already and we'd be thrilled to have more!
+Please get involved by joining the [Kubernetes Storage Special Interest Group (SIG)](https://github.com/kubernetes/community/tree/master/sig-storage)
+to help us enhance this feature.
+There are a lot of good ideas already and we'd be thrilled to have more!
 
 ## Acknowledgment
 
 It takes a wonderful group to make wonderful software.
-Thanks are due to everyone who has contributed to the CrossNamespaceVolumeDataSouce feature,
-especially (in alphabetical order) Tim Hockin, Masaki Kimura, Michelle Au and Xing Yang.
-It’s been a joy to work with y’all on this.
+Special thanks to the following people for the insightful reviews,
+thorough consideration and valuable contribution to the CrossNamespaceVolumeDataSouce feature:
+
+* Michelle Au (msau42)
+* Xing Yang (xing-yang)
+* Masaki Kimura (mkimuram)
+* Tim Hockin (thockin)
+* Ben Swartzlander (bswartz)
+* Rob Scott (robscott)
+* John Griffith (j-griffith)
+* Michael Henriksen (mhenriks)
+* Mustafa Elbehery (Elbehery)
+
+It’s been a joy to work with y'all on this.
