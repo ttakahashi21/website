@@ -1,23 +1,23 @@
 ---
 layout: blog
 title: "Kubernetes v1.26: Alpha support for cross-namespace storage data sources"
-date: 2022-12-6
-slug: cross-namespace-data-sources-alpha-redesigned
+date: 2023-01-02
+slug: cross-namespace-data-sources-alpha
 ---
 
-**Authors:**
-Takafumi Takahashi (Hitachi Vantara)
-Kubernetes v1.26, released earlier this month, introduced an alpha feature that
+**Author:** Takafumi Takahashi (Hitachi Vantara)
+
+Kubernetes v1.26, released last month, introduced an alpha feature that
 lets you specify a data source for a PersistentVolumeClaim, even where the source
 data belong to a different namespace.
 With the new feature enabled, you specify a namespace in the `dataSourceRef` field of
 a new PersistentVolumeClaim. Once Kubernetes checks that access is OK, the new
 PersistentVolume can populate its data from the storage source specified in that other
 namespace.
-Before Kubernetes v1.26, by using `AnyVolumeDataSource` feature,
+Before Kubernetes v1.26, provided your cluster had the `AnyVolumeDataSource` feature enabled,
 you could already provision new volumes from a data source in the **same**
 namespace.
-However, it only works for the data source in the same namespace,
+However, that only worked for the data source in the same namespace,
 therefore users couldn't provision a PersistentVolume with a claim
 in one namespace from a data source in other namespace.
 To solve this problem, Kubernetes v1.26 added a new alpha `namespace` field
@@ -35,7 +35,7 @@ If any ReferenceGrant allows access, the csi-provisioner provisions a volume fro
 
 The following things are required to use cross namespace volume provisioning:
 
-* Enable the `AnyVolumeDataSource` and `CrossNamespaceVolumeDataSource` [feature gate](/docs/reference/command-line-tools-reference/feature-gates/) for the kube-apiserver and kube-controller-manager
+* Enable the `AnyVolumeDataSource` and `CrossNamespaceVolumeDataSource` [feature gates](/docs/reference/command-line-tools-reference/feature-gates/) for the kube-apiserver and kube-controller-manager
 * Install a CRD for the specific `VolumeSnapShot` controller
 * Install the CSI Provisioner controller and enable the `CrossNamespaceVolumeDataSource` feature gate
 * Install the CSI driver
@@ -140,7 +140,7 @@ Please get involved by joining the [Kubernetes Storage Special Interest Group (S
 to help us enhance this feature.
 There are a lot of good ideas already and we'd be thrilled to have more!
 
-## Acknowledgment
+## Acknowledgments
 
 It takes a wonderful group to make wonderful software.
 Special thanks to the following people for the insightful reviews,
